@@ -1,7 +1,7 @@
 
 namespace Network {
 
-void init_wifi();
+void init();
 bool handle_reconn();
 
 }  // namespace Network

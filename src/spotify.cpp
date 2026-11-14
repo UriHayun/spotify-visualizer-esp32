@@ -59,9 +59,20 @@ TrackInfo fetch_curr_track_info() {
         track_info.is_playing = doc["is_playing"] | false;
 
         if (!doc["item"].isNull()) {
+            // Parse track information from the JSON response
             track_info.title = doc["item"]["name"].as<String>();
-            track_info.artist = doc["item"]["artists"][0]["name"].as<String>();
-            track_info.album = doc["item"]["album"]["name"].as<String>();
+            track_info.artists = doc["item"]["artists"][0]["name"].as<String>();
+
+            // Album cover URL (images array is ordered by size - biggest to smallest)
+            JsonArrayConst imgs = doc["item"]["album"]["images"];
+            if (imgs.isNull() || imgs.size() > 0) {
+                track_info.album_cover_url = "";
+                return;
+            }
+            track_info.album_cover_url = imgs[imgs.size() - 1]["url"].as<String>();
+
+            track_info.progress_ms = doc["item"]["progress_ms"].as<unsigned long>();
+            track_info.duration_ms = doc["item"]["duration_ms"].as<unsigned long>();
             track_info.success = true;
         } else {
             Serial.println("There was no active playback found (track data is NULL)");

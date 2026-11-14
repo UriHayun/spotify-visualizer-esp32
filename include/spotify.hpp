@@ -7,8 +7,10 @@ namespace Spotify {
 
 struct TrackInfo {
     String title;
-    String artist;
-    String album;
+    String artists;
+    String album_cover_url;
+    unsigned long progress_ms = 0;
+    unsigned long duration_ms = 0;
     bool is_playing = false;
     bool success = false;
 };

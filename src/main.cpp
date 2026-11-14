@@ -1,3 +1,5 @@
+#include "config.hpp"
+#include "display.hpp"
 #include "network.hpp"
 #include "spotify.hpp"
 
@@ -7,7 +9,7 @@
 Spotify::TrackInfo curr_track_info;
 
 void setup() {
-    Serial.begin(115200);
+    Serial.begin(Config::Serial::MONITOR_BAUD_RATE_BPS);
 
     while (!Serial) {
         delay(10);
@@ -15,7 +17,8 @@ void setup() {
 
     Serial.println("System initialized. Start Spotify visulizer...");
 
-    Network::init_wifi();
+    Display::init();
+    Wifi::init();
 
     // Sync clock via NTP so TLS certificate validation succeeds
     // (prevent 1970 Unix Epoch default time problem)

@@ -1,6 +1,6 @@
 
-#include "network.hpp"
 #include "config.hpp"
+#include "network.hpp"
 #include "secrets.hpp"
 
 #include <WiFi.h>
@@ -13,9 +13,9 @@ unsigned long prev_ms = 0;
 
 }  // namespace
 
-namespace Network {
+namespace Wifi {
 
-void init_wifi() {
+void init() {
     // Set WiFi mode to STA (Station) - wireless microcontroller acts as a client
     WiFi.mode(WIFI_STA);
 
@@ -61,4 +61,4 @@ bool handle_reconn() {
     return WiFi.status() == WL_CONNECTED;
 }
 
-}  // namespace Network
+}  // namespace Wifi
