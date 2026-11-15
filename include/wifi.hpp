@@ -1,7 +1,7 @@
+#pragma once
 
-namespace Network {
+namespace Wifi {
 
 void init();
-bool handle_reconn();
 
-}  // namespace Network
+}  // namespace Wifi

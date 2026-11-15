@@ -149,13 +149,13 @@ void album_cover(const String &url) {
         return;
     }
 
-    std::vector<uint8_t> jpg_buffer(static_cast<std::size_t>(len));
+    std::vector<uint8_t> jpg_buff(static_cast<std::size_t>(len));
     WiFiClient *stream = http.getStreamPtr();
 
     std::size_t bytes_read = 0;
     const unsigned long start_ms = millis();
 
-    while (http.connected() && bytes_read < jpg_buffer.size() && (millis() - start_ms < 5000)) {
+    while (http.connected() && bytes_read < jpg_buff.size() && (millis() - start_ms < 5000)) {
         const int available = stream->available();
         if (available <= 0) {
             delay(1);
@@ -163,18 +163,18 @@ void album_cover(const String &url) {
         }
 
         const std::size_t to_read =
-            std::min(static_cast<std::size_t>(available), jpg_buffer.size() - bytes_read);
-        bytes_read += stream->readBytes(jpg_buffer.data() + bytes_read, to_read);
+            std::min(static_cast<std::size_t>(available), jpg_buff.size() - bytes_read);
+        bytes_read += stream->readBytes(jpg_buff.data() + bytes_read, to_read);
         delay(1);
     }
 
     http.end();
 
-    if (bytes_read != jpg_buffer.size()) {
+    if (bytes_read != jpg_buff.size()) {
         return;
     }
 
-    tft.drawJpg(jpg_buffer.data(), jpg_buffer.size(), img.x, img.y);
+    tft.drawJpg(jpg_buff.data(), jpg_buff.size(), img.x, img.y);
     cache.album_cover_url = url;
 }
 
@@ -197,7 +197,7 @@ void non_playing_display() {
     Detail::render_cache.non_playing_shown = true;
 }
 
-void details(const String &title, const String &artists) {
+void metadata(const String &title, const String &artists) {
     constexpr Rect area{86, 10, 224, 66};
 
     auto &cache = Detail::render_cache;
@@ -232,7 +232,7 @@ void details(const String &title, const String &artists) {
 void all(const TrackInfo &track_info) {
     Detail::render_cache.non_playing_shown = false;
 
-    Render::details(track_info.title, track_info.artists);
+    Render::metadata(track_info.title, track_info.artists);
     Render::album_cover(track_info.album_cover_url);
     Render::progress_bar(track_info.progress_ms, track_info.duration_ms);
     Render::time_label(track_info.progress_ms, track_info.duration_ms);

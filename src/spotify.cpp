@@ -67,7 +67,7 @@ TrackInfo fetch_curr_track_info() {
             JsonArrayConst imgs = doc["item"]["album"]["images"];
             if (imgs.isNull() || imgs.size() > 0) {
                 track_info.album_cover_url = "";
-                return;
+                return track_info;
             }
             track_info.album_cover_url = imgs[imgs.size() - 1]["url"].as<String>();
 
@@ -123,35 +123,40 @@ namespace Spotify::Detail {
 // Solves Unix Epoch default time problem by syncing the time with NTP,
 // in order to validate TLS certificates for HTTPS requests (prevents 1970 clock default error)
 bool sync_device_ntp() {
-    if (esp_sntp_enabled() == 0) {
+    using namespace std::chrono;
+    using namespace std::chrono_literals;
+
+    // Cannot resume if not connected to Wi-Fi
+    if (WiFi.status() != WL_CONNECTED) {
+        return false;
+    }
+
+    g_time_synced.store(false, std::memory_order_relaxed);
+    sntp_set_time_sync_notification_cb(on_time_sync);
+
+    if (!esp_sntp_enabled()) {
         esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
         esp_sntp_setservername(0, Config::Spotify::NTP_SERVER.data());
         esp_sntp_init();
+    } else {
+        esp_sntp_restart();  // Already running - force a fresh request
     }
 
-    const auto start_time = std::chrono::steady_clock::now();
-
+    const auto start = steady_clock::now();
     Serial.print("Waiting for NTP time sync: ");
-    while (true) {
-        if (std::time(nullptr) >= Config::Spotify::MIN_VALID_EPOCH) {
-            Serial.println();
-            Serial.println("Time synchronized successfully!");
 
-            return true;
-        }
-
-        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - start_time)
-                                 .count();
-
-        if (static_cast<std::size_t>(elapsed) >= Config::Spotify::NTP_SYNC_TIMEOUT_MS) {
+    while (!g_time_synced.load(std::memory_order_acquire)) {
+        if (steady_clock::now() - start >= Config::Spotify::NTP_SYNC_TIMEOUT) {
             Serial.println();
             return false;
         }
-
-        Serial.printf(".");
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        Serial.print('.');
+        std::this_thread::sleep_for(500ms);
     }
+
+    Serial.println();
+    Serial.println("Time synchronized successfully!");
+    return true;
 }
 
 bool tls_certify_requests(WiFiClientSecure &client) {
