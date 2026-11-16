@@ -29,6 +29,14 @@ void init() {
 
     Serial.println("Attempting connection via WiFiManager...");
 
+    // - Try joining networks of saved credentials from a previous setup first.
+    // - If none saved or the join fails: ESP32 switches to AP mode -
+    //   hosts its own hotspot "ESP32_Config_AP".
+    // - User connects using a phone, captive portal opens where you provide a
+    //   Wi-Fi's SSID and password in order to connect to a router
+    // * This Wi-Fi's credentials are saved to flash (1st step)
+    // * If nobody configures before configured portal timeout, returns false
+    // Blocks program until one of these outcomes occurs
     bool success = wm.autoConnect("ESP32_Config_AP", Secrets::Wifi::AUTO_CONN_PASSWORD);
 
     if (!success) {

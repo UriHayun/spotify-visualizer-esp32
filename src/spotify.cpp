@@ -29,7 +29,7 @@ TrackInfo fetch_curr_track_info() {
         return track_info;
     }
 
-    String auth_header = "Bearer " + String(Secrets::Spotify::SPOTIFY_ACCESS_TOKEN);
+    String auth_header = "Bearer " + String(Detail::fetch_access_token());
 
     http.addHeader("Authorization", auth_header);
     http.addHeader("Content-Type", "application/json");
@@ -65,7 +65,7 @@ TrackInfo fetch_curr_track_info() {
 
             // Album cover URL (images array is ordered by size - biggest to smallest)
             JsonArrayConst imgs = doc["item"]["album"]["images"];
-            if (imgs.isNull() || imgs.size() > 0) {
+            if (imgs.isNull() || imgs.size() == 0) {
                 track_info.album_cover_url = "";
                 return track_info;
             }
@@ -168,6 +168,34 @@ bool tls_certify_requests(WiFiClientSecure &client) {
 
     client.setCACert(Secrets::Spotify::SPOTIFY_ROOT_CA);
     return true;
+}
+
+String fetch_access_token() {
+    WiFiClientSecure client;
+    client.setCACert(Secrets::Spotify::SPOTIFY_ROOT_CA);
+
+    HTTPClient http;
+    http.begin(client, "https://accounts.spotify.com/api/token");
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+    String payload = "grant_type=refresh_token";
+    payload += "&refresh_token=" + String(Secrets::Spotify::REFRESH_TOKEN);
+    payload += "&client_id=" + String(Secrets::Spotify::CLIENT_ID);
+    payload += "&client_secret=" + String(Secrets::Spotify::CLIENT_SECRET);
+
+    int http_code = http.POST(payload);
+    String access_token = "";
+
+    if (http_code == HTTP_CODE_OK) {
+        JsonDocument doc;
+        deserializeJson(doc, http.getString());
+        access_token = doc["access_token"].as<String>();
+    } else {
+        Serial.printf("Failed to refresh access token! HTTP code: %d\n", http_code);
+    }
+
+    http.end();
+    return access_token;
 }
 
 }  // namespace Spotify::Detail
