@@ -15,7 +15,7 @@ void setup() {
         delay(10);
     }
 
-    Serial.println("System initialized. Start Spotify visulizer...");
+    Serial.println("System initialized. Start Spotify visualizer...");
 
     Display::init();
     Wifi::init();
@@ -28,13 +28,17 @@ void setup() {
         Serial.println("NTP time sync failed. TLS certificate validation might fail");
     }
 
-    Display::render(Spotify::fetch_curr_track_info);
+    // Explicitly cache current track info for loop()
+    curr_track_info = Spotify::fetch_curr_track_info();
+
+    Display::render(curr_track_info);
 }
 
 void loop() {
-    // Continuosly update currently playing track if connected to WiFi
+    // Continuously update currently playing track if connected to WiFi
     if (WiFi.status() == WL_CONNECTED) {
         Spotify::update_curr_track_info(curr_track_info);
+        Display::render(curr_track_info);
     }
 
     delay(100);

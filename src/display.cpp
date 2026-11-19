@@ -1,8 +1,12 @@
-#include <spotify.hpp>
+#include "config.hpp"
+#include "spotify.hpp"
 
+#include <HTTPClient.h>
 #include <LilyGo_T_Display_S3.h>
+#include <WiFiClientSecure.h>
 
 #include <algorithm>
+#include <chrono>
 #include <limits>
 #include <string>
 #include <vector>
@@ -46,7 +50,13 @@ std::string format_mins_secs(unsigned long total_secs) {
     return std::to_string(mins) + ':' + std::to_string(secs);
 }
 
-void invalidate_caches() { render_cache = RenderCache{}; }
+void invalidate_caches() {
+    render_cache.title = "";
+    render_cache.artists = "";
+    render_cache.album_cover_url = "";
+    render_cache.progress_secs = std::numeric_limits<unsigned long>::max();
+    render_cache.duration_secs = std::numeric_limits<unsigned long>::max();
+}
 
 }  // namespace Display::Render::Detail
 
@@ -65,7 +75,7 @@ void progress_bar(unsigned long progress_ms, unsigned long duration_ms) {
     // Draw rectangled-shaped outline
     tft.drawRect(outline.x, outline.y, outline.w, outline.h, TFT_WHITE);
 
-    const int filled_w = std::clamp(
+    const int filled_w = std::clamp<int>(
         static_cast<int>(static_cast<float>(progress_ms) / duration_ms * progress_bar_padded.w),
         0,
         progress_bar_padded.w);
@@ -131,7 +141,7 @@ void album_cover(const String &url) {
     }
 
     WiFiClientSecure client;
-    tls_certify_requests(client);
+    Spotify::Detail::tls_certify_requests(client);
 
     HTTPClient http;
     if (!http.begin(client, url)) {
@@ -139,12 +149,16 @@ void album_cover(const String &url) {
     }
 
     if (http.GET() != HTTP_CODE_OK) {
+        tft.fillRect(img.x, img.y, img.w, img.h, TFT_BLACK);
+        cache.album_cover_url = "";
         http.end();
         return;
     }
 
     const int len = http.getSize();
     if (len <= 0) {
+        tft.fillRect(img.x, img.y, img.w, img.h, TFT_BLACK);
+        cache.album_cover_url = "";
         http.end();
         return;
     }
@@ -153,17 +167,20 @@ void album_cover(const String &url) {
     WiFiClient *stream = http.getStreamPtr();
 
     std::size_t bytes_read = 0;
-    const unsigned long start_ms = millis();
 
-    while (http.connected() && bytes_read < jpg_buff.size() && (millis() - start_ms < 5000)) {
-        const int available = stream->available();
-        if (available <= 0) {
+    const auto start_time_ms = std::chrono::steady_clock::now();
+
+    while (http.connected() && bytes_read < jpg_buff.size() &&
+           std::chrono::steady_clock::now() - start_time_ms <
+               Config::Display::ALBUM_COVER_DOWNLOAD_TIMEOUT_MS) {
+        const int avail = stream->available();
+        if (avail <= 0) {
             delay(1);
             continue;
         }
 
         const std::size_t to_read =
-            std::min(static_cast<std::size_t>(available), jpg_buff.size() - bytes_read);
+            std::min(static_cast<std::size_t>(avail), jpg_buff.size() - bytes_read);
         bytes_read += stream->readBytes(jpg_buff.data() + bytes_read, to_read);
         delay(1);
     }
@@ -171,6 +188,8 @@ void album_cover(const String &url) {
     http.end();
 
     if (bytes_read != jpg_buff.size()) {
+        tft.fillRect(img.x, img.y, img.w, img.h, TFT_BLACK);
+        cache.album_cover_url = "";
         return;
     }
 

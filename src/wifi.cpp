@@ -15,17 +15,21 @@ void init() {
     WiFi.mode(WIFI_STA);
 
     // Print found, nearby networks to Serial Monitor
-    const int NETWORKS = WiFi.scanNetworks();
-    Serial.printf("Found %d networks: ", NETWORKS);
-    for (int i = 0; i < NETWORKS; i++) {
-        const String ssid = WiFi.SSID(i);
-        Serial.printf("%d: %s (%d dBm)\n", i + 1, ssid.c_str(), WiFi.RSSI(i));
+    const int networks = WiFi.scanNetworks();
+    if (networks < 0) {
+        Serial.printf("Wi-Fi scan failed (error code: %d)\n", networks);
+    } else {
+        Serial.printf("Found %d networks:\n", networks);
+        for (int i = 0; i < networks; i++) {
+            const String ssid = WiFi.SSID(i);
+            Serial.printf("%d: %s (%d dBm)\n", i + 1, ssid.c_str(), WiFi.RSSI(i));
+        }
     }
 
     WiFiManager wm;
 
     // Configure to auto-close the portal if nobody configures it within N seconds
-    wm.setConfigPortalTimeout(Config::Wifi::RECONN_INTERVAL_MS);
+    wm.setConfigPortalTimeout(Config::Wifi::CONFIG_PORTAL_TIMEOUT_SEC);
 
     Serial.println("Attempting connection via WiFiManager...");
 
@@ -41,15 +45,18 @@ void init() {
 
     if (!success) {
         Serial.println("Failed to connect and configuration portal timed out. Restarting...");
+
         delay(3000);
-        ESP.restart();  // Restart the ESP32 to retry the connection cycle
+
+        // Restart the ESP32 to retry the connection cycle
+        ESP.restart();
     }
 
     // Enforce native background auto-reconnects once connected
     WiFi.setAutoReconnect(true);
 
     const String ip_address = WiFi.localIP().toString();
-    Serial.printf("WiFi connected successfully!\nIP Address: %s\n", ip_address.c_str());
+    Serial.printf("Wi-Fi connected successfully!\nIP Address: %s\n", ip_address.c_str());
 }
 
 }  // namespace Wifi

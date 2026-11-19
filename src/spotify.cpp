@@ -1,4 +1,5 @@
 #include "spotify.hpp"
+#include "config.hpp"
 #include "esp_sntp.h"
 #include "secrets.hpp"
 
@@ -9,6 +10,8 @@
 #include <WiFiClientSecure.h>
 
 #include <chrono>
+#include <format>
+#include <mutex>
 #include <thread>
 
 namespace Spotify {
@@ -29,16 +32,53 @@ TrackInfo fetch_curr_track_info() {
         return track_info;
     }
 
-    String auth_header = "Bearer " + String(Detail::fetch_access_token());
+    const String access_token = Detail::fetch_access_token();
+    if (access_token.isEmpty()) {
+        Serial.println("No access token available");
+        http.end();
+        return track_info;
+    }
+
+    String auth_header = "Bearer " + access_token;
 
     http.addHeader("Authorization", auth_header);
     http.addHeader("Content-Type", "application/json");
 
-    const int http_res_code = http.GET();
+    int http_res_code = http.GET();
 
     // Intercept low-level network or hardware errors first
     if (http_res_code <= 0) {
         Serial.printf("HTTP %d: connection failed or blocked\n", http_res_code);
+        http.end();
+        return track_info;
+    }
+
+    // If access token is expired/invlid, force-refresh the token before
+    if (http_res_code == HTTP_CODE_UNAUTHORIZED) {
+        Serial.println("HTTP 401: unauthorized. "
+                       "Your Spotify access token has expired or is invalid");
+        http.end();
+
+        const String refreshed_token = Detail::fetch_access_token(true);
+        if (refreshed_token.isEmpty()) {
+            Serial.println("Token force-refresh returned empty token");
+            return track_info;
+        }
+
+        if (!http.begin(client, "https://api.spotify.com/v1/me/player/currently-playing")) {
+            Serial.println("Failed to re-open HTTPS session after access token refresh");
+            return track_info;
+        }
+
+        http.addHeader("Authorization", "Bearer " + refreshed_token);
+        http.addHeader("Content-Type", "application/json");
+        http_res_code = http.GET();
+    }
+
+    // Intercept low-level network or hardware errors first
+    if (http_res_code <= 0) {
+        Serial.printf("HTTP %d: connection failed or blocked\n", http_res_code);
+        http.end();
         return track_info;
     }
 
@@ -67,6 +107,7 @@ TrackInfo fetch_curr_track_info() {
             JsonArrayConst imgs = doc["item"]["album"]["images"];
             if (imgs.isNull() || imgs.size() == 0) {
                 track_info.album_cover_url = "";
+                http.end();
                 return track_info;
             }
             track_info.album_cover_url = imgs[imgs.size() - 1]["url"].as<String>();
@@ -85,10 +126,13 @@ TrackInfo fetch_curr_track_info() {
         Serial.println("HTTP 204: no content. Connected successfully, no track is playing "
                        "right now though");
         break;
+
     case (HTTP_CODE_UNAUTHORIZED):
-        Serial.println("HTTP 401: unauthorized. "
-                       "Your Spotify access token has expired or is invalid");
+        // Reached only if the initial request and the forced token refresh both returned HTTP 401
+        Serial.println(
+            "HTTP 401: still unauthorized after token refresh - giving up for this poll");
         break;
+
     case (HTTP_CODE_FORBIDDEN):
         Serial.println("HTTP 403: access forbidden. Your Spotify access token has expired, is "
                        "invalid, or your account isn't premium");
@@ -117,6 +161,14 @@ void update_curr_track_info(TrackInfo &curr_track_info) {
 }
 
 }  // namespace Spotify
+
+namespace {
+
+std::mutex token_mutex;
+String cached_access_token = "";
+unsigned long token_expiry_ms = 0;
+
+}  // namespace
 
 namespace Spotify::Detail {
 
@@ -160,8 +212,8 @@ bool sync_device_ntp() {
 }
 
 bool tls_certify_requests(WiFiClientSecure &client) {
-    if (Secrets::Spotify::SPOTIFY_ROOT_CA == nullptr ||
-        Secrets::Spotify::SPOTIFY_ROOT_CA[0] == '\0') {
+    if (Config::Spotify::SPOTIFY_ROOT_CA == nullptr ||
+        Config::Spotify::SPOTIFY_ROOT_CA[0] == '\0') {
         Serial.println("Spotify root CA certificate isn't configured");
         return false;
     }
@@ -170,32 +222,65 @@ bool tls_certify_requests(WiFiClientSecure &client) {
     return true;
 }
 
-String fetch_access_token() {
+String fetch_access_token(bool force_refresh) {
+    {
+        const std::lock_guard<std::mutex> lock(token_mutex);
+        const unsigned long now_ms = millis();
+        const bool has_token = cached_access_token.length() > 0;
+        const bool is_unexpired = has_token && (now_ms < token_expiry_ms);
+
+        if (!force_refresh && is_unexpired) {
+            return cached_access_token;
+        }
+    }
+
     WiFiClientSecure client;
-    client.setCACert(Secrets::Spotify::SPOTIFY_ROOT_CA);
+    if (!tls_certify_requests(client)) {
+        return "";
+    }
 
     HTTPClient http;
-    http.begin(client, "https://accounts.spotify.com/api/token");
+    if (!http.begin(client, "https://accounts.spotify.com/api/token")) {
+        Serial.println("Failed to begin token refresh HTTPS session");
+        return "";
+    }
+
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
-    String payload = "grant_type=refresh_token";
-    payload += "&refresh_token=" + String(Secrets::Spotify::REFRESH_TOKEN);
-    payload += "&client_id=" + String(Secrets::Spotify::CLIENT_ID);
-    payload += "&client_secret=" + String(Secrets::Spotify::CLIENT_SECRET);
+    const String payload = String(
+        std::format("grant_type=refresh_token&refresh_token={}&client_id={}&client_secret={}",
+            Secrets::Spotify::REFRESH_TOKEN,
+            Secrets::Spotify::CLIENT_ID,
+            Secrets::Spotify::CLIENT_SECRET)
+            .c_str());
 
     int http_code = http.POST(payload);
-    String access_token = "";
 
     if (http_code == HTTP_CODE_OK) {
         JsonDocument doc;
-        deserializeJson(doc, http.getString());
-        access_token = doc["access_token"].as<String>();
+        const DeserializationError err = deserializeJson(doc, http.getString());
+        const String new_token = doc["access_token"] | "";
+
+        if (!err && new_token.length() > 0) {
+            const unsigned long lifetime_ms = (doc["expires_in"] | 3600UL) * 1000UL;
+            const unsigned long effective_ms =
+                (lifetime_ms > Config::Spotify::REFRESH_MARGIN_MS)
+                    ? (lifetime_ms - Config::Spotify::REFRESH_MARGIN_MS)
+                    : (lifetime_ms / Config::Spotify::SHORT_LIVED_TOKEN_DIVISOR);
+
+            const std::lock_guard<std::mutex> lock(token_mutex);
+            cached_access_token = new_token;
+            token_expiry_ms = millis() + effective_ms;
+        } else {
+            Serial.printf("Failed to parse token response: %s\n", err.c_str());
+        }
     } else {
         Serial.printf("Failed to refresh access token! HTTP code: %d\n", http_code);
     }
 
     http.end();
-    return access_token;
+    const std::lock_guard<std::mutex> lock(token_mutex);
+    return cached_access_token;
 }
 
 }  // namespace Spotify::Detail

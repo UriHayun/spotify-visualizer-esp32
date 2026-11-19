@@ -25,5 +25,6 @@ namespace Spotify::Detail {
 
 bool sync_device_ntp();
 bool tls_certify_requests(WiFiClientSecure &client);
+String fetch_access_token(bool force_refresh = false);
 
 }  // namespace Spotify::Detail
