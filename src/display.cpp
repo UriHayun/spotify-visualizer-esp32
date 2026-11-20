@@ -1,8 +1,10 @@
+#include "display.hpp"
 #include "config.hpp"
 #include "spotify.hpp"
 
+#include "LilyGo_T_Display_S3.h"
 #include <HTTPClient.h>
-#include <LilyGo_T_Display_S3.h>
+#include <WiFi.h>
 #include <WiFiClientSecure.h>
 
 #include <algorithm>

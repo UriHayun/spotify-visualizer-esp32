@@ -22,7 +22,7 @@ void init() {
         Serial.printf("Found %d networks:\n", networks);
         for (int i = 0; i < networks; i++) {
             const String ssid = WiFi.SSID(i);
-            Serial.printf("%d: %s (%d dBm)\n", i + 1, ssid.c_str(), WiFi.RSSI(i));
+            Serial.printf("%d: %s (%ld dBm)\n", i + 1, ssid.c_str(), WiFi.RSSI(i));
         }
     }
 

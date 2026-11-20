@@ -9,7 +9,7 @@
 Spotify::TrackInfo curr_track_info;
 
 void setup() {
-    Serial.begin(Config::Serial::MONITOR_BAUD_RATE_BPS);
+    Serial.begin(Config::Serial_::MONITOR_BAUD_RATE_BPS);
 
     while (!Serial) {
         delay(10);

@@ -16,7 +16,7 @@ namespace Config::Spotify {
 constexpr unsigned long SPOTIFY_POLL_INTERVAL_MS = 15'000;
 
 constexpr std::string_view NTP_SERVER = "pool.ntp.org";
-constexpr std::chrono::milliseconds NTP_SYNC_TIMEOUT_MS = 20'000;
+constexpr std::chrono::milliseconds NTP_SYNC_TIMEOUT_MS = std::chrono::milliseconds(20'000);
 constexpr std::time_t MIN_VALID_EPOCH = 1'767'225'600;  // 01-01-2026 00:00:00 UTC
 
 constexpr unsigned long REFRESH_MARGIN_MS = 5UL * 60UL * 1000UL;  // Refresh 5 minutes early
@@ -59,9 +59,9 @@ constexpr auto ALBUM_COVER_DOWNLOAD_TIMEOUT_MS = std::chrono::milliseconds{5000}
 
 }  // namespace Config::Display
 
-namespace Config::Serial {
+namespace Config::Serial_ {
 
 // Speed at which data is sent over a serial communication cable (bps)
 constexpr unsigned long MONITOR_BAUD_RATE_BPS = 115'200;
 
-}  // namespace Config::Serial
+}  // namespace Config::Serial_

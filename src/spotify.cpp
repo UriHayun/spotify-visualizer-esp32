@@ -9,6 +9,7 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
+#include <atomic>
 #include <chrono>
 #include <format>
 #include <mutex>
@@ -32,7 +33,7 @@ TrackInfo fetch_curr_track_info() {
         return track_info;
     }
 
-    const String access_token = Detail::fetch_access_token();
+    String access_token = Detail::fetch_access_token();
     if (access_token.isEmpty()) {
         Serial.println("No access token available");
         http.end();
@@ -53,14 +54,14 @@ TrackInfo fetch_curr_track_info() {
         return track_info;
     }
 
-    // If access token is expired/invlid, force-refresh the token before
+    // If access token is expired/invalid, force-refresh the token before
     if (http_res_code == HTTP_CODE_UNAUTHORIZED) {
         Serial.println("HTTP 401: unauthorized. "
                        "Your Spotify access token has expired or is invalid");
         http.end();
 
-        const String refreshed_token = Detail::fetch_access_token(true);
-        if (refreshed_token.isEmpty()) {
+        access_token = Detail::fetch_access_token(true);
+        if (access_token.isEmpty()) {
             Serial.println("Token force-refresh returned empty token");
             return track_info;
         }
@@ -70,7 +71,7 @@ TrackInfo fetch_curr_track_info() {
             return track_info;
         }
 
-        http.addHeader("Authorization", "Bearer " + refreshed_token);
+        http.addHeader("Authorization", "Bearer " + access_token);
         http.addHeader("Content-Type", "application/json");
         http_res_code = http.GET();
     }
@@ -165,8 +166,15 @@ void update_curr_track_info(TrackInfo &curr_track_info) {
 namespace {
 
 std::mutex token_mutex;
-String cached_access_token = "";
+String token = "";
 unsigned long token_expiry_ms = 0;
+std::atomic<bool> is_ntp_synced = false;
+
+void invalidate_token() {
+    const std::lock_guard<std::mutex> lock(token_mutex);
+    token = "";
+    token_expiry_ms = 0;
+}
 
 }  // namespace
 
@@ -183,8 +191,11 @@ bool sync_device_ntp() {
         return false;
     }
 
-    g_time_synced.store(false, std::memory_order_relaxed);
-    sntp_set_time_sync_notification_cb(on_time_sync);
+    is_ntp_synced.store(false, std::memory_order_relaxed);
+    esp_sntp_set_time_sync_notification_cb([](struct timeval *) {
+        is_ntp_synced.store(true, std::memory_order_release);
+        Serial.println("SNTP time synchronized via callback");
+    });
 
     if (!esp_sntp_enabled()) {
         esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
@@ -197,8 +208,8 @@ bool sync_device_ntp() {
     const auto start = steady_clock::now();
     Serial.print("Waiting for NTP time sync: ");
 
-    while (!g_time_synced.load(std::memory_order_acquire)) {
-        if (steady_clock::now() - start >= Config::Spotify::NTP_SYNC_TIMEOUT) {
+    while (!is_ntp_synced.load(std::memory_order_acquire)) {
+        if (steady_clock::now() - start >= Config::Spotify::NTP_SYNC_TIMEOUT_MS) {
             Serial.println();
             return false;
         }
@@ -212,13 +223,12 @@ bool sync_device_ntp() {
 }
 
 bool tls_certify_requests(WiFiClientSecure &client) {
-    if (Config::Spotify::SPOTIFY_ROOT_CA == nullptr ||
-        Config::Spotify::SPOTIFY_ROOT_CA[0] == '\0') {
+    if (Config::Spotify::ROOT_CA[0] == '\0') {
         Serial.println("Spotify root CA certificate isn't configured");
         return false;
     }
 
-    client.setCACert(Secrets::Spotify::SPOTIFY_ROOT_CA);
+    client.setCACert(Config::Spotify::ROOT_CA);
     return true;
 }
 
@@ -226,11 +236,11 @@ String fetch_access_token(bool force_refresh) {
     {
         const std::lock_guard<std::mutex> lock(token_mutex);
         const unsigned long now_ms = millis();
-        const bool has_token = cached_access_token.length() > 0;
+        const bool has_token = token.length() > 0;
         const bool is_unexpired = has_token && (now_ms < token_expiry_ms);
 
         if (!force_refresh && is_unexpired) {
-            return cached_access_token;
+            return token;
         }
     }
 
@@ -255,32 +265,36 @@ String fetch_access_token(bool force_refresh) {
             .c_str());
 
     int http_code = http.POST(payload);
+    const String body = (http_code == HTTP_CODE_OK) ? http.getString() : "";
+    http.end();
 
-    if (http_code == HTTP_CODE_OK) {
-        JsonDocument doc;
-        const DeserializationError err = deserializeJson(doc, http.getString());
-        const String new_token = doc["access_token"] | "";
-
-        if (!err && new_token.length() > 0) {
-            const unsigned long lifetime_ms = (doc["expires_in"] | 3600UL) * 1000UL;
-            const unsigned long effective_ms =
-                (lifetime_ms > Config::Spotify::REFRESH_MARGIN_MS)
-                    ? (lifetime_ms - Config::Spotify::REFRESH_MARGIN_MS)
-                    : (lifetime_ms / Config::Spotify::SHORT_LIVED_TOKEN_DIVISOR);
-
-            const std::lock_guard<std::mutex> lock(token_mutex);
-            cached_access_token = new_token;
-            token_expiry_ms = millis() + effective_ms;
-        } else {
-            Serial.printf("Failed to parse token response: %s\n", err.c_str());
-        }
-    } else {
+    if (http_code != HTTP_CODE_OK) {
         Serial.printf("Failed to refresh access token! HTTP code: %d\n", http_code);
+        invalidate_token();
+        return "";
     }
 
-    http.end();
+    JsonDocument doc;
+    const DeserializationError err = deserializeJson(doc, body);
+    const String new_token = doc["access_token"] | "";
+
+    if (err || new_token.length() == 0) {
+        Serial.printf("Failed to parse token response: %s\n", err.c_str());
+        invalidate_token();
+        return "";
+    }
+
+    const unsigned long lifetime_ms = (doc["expires_in"] | 3600UL) * 1000UL;
+    const unsigned long effective_ms =
+        (lifetime_ms > Config::Spotify::REFRESH_MARGIN_MS)
+            ? (lifetime_ms - Config::Spotify::REFRESH_MARGIN_MS)
+            : (lifetime_ms / Config::Spotify::SHORT_LIVED_TOKEN_DIVISOR);
+
     const std::lock_guard<std::mutex> lock(token_mutex);
-    return cached_access_token;
+    token = new_token;
+    token_expiry_ms = millis() + effective_ms;
+
+    return token;
 }
 
 }  // namespace Spotify::Detail

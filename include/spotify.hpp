@@ -1,7 +1,10 @@
-#include <cstddef>
-#include <string_view>
+#pragma once
 
 #include <Arduino.h>
+#include <WiFiClientSecure.h>
+
+#include <cstddef>
+#include <string_view>
 
 namespace Spotify {
 
