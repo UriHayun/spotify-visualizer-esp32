@@ -52,7 +52,7 @@ struct Rect {
 void progress_bar(unsigned long progress_ms, unsigned long duration_ms);
 void time_label(unsigned long progress_ms, unsigned long duration_ms);
 void album_cover(const String &url);
-void non_playing_display();
+void non_playing();
 void metadata(const String &title, const String &artists);
 void all(const Spotify::TrackInfo &track_info);
 

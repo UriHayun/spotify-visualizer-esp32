@@ -2,8 +2,9 @@
 #include "config.hpp"
 #include "spotify.hpp"
 
-#include "LilyGo_T_Display_S3.h"
 #include <HTTPClient.h>
+#include <TFT_eSPI.h>
+#include <TJpg_Decoder.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
@@ -15,11 +16,28 @@
 
 using Spotify::TrackInfo;
 
+namespace {
+
+TFT_eSPI tft;
+
+// TJpg_Decoder calls this for each decoded block
+bool jpg_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t *bitmap) {
+    if (y >= tft.height()) {
+        return false;
+    }
+    tft.pushImage(x, y, w, h, bitmap);
+    return true;
+}
+
+}  // namespace
+
 namespace Display {
 
 void init() {
     tft.begin();
     tft.setRotation(1);  // Landscape (320x170)
+    TJpgDec.setSwapBytes(true);
+    TJpgDec.setCallback(jpg_output);
     tft.fillScreen(TFT_BLACK);
 
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -29,7 +47,7 @@ void init() {
 }
 void render(const TrackInfo &track_info) {
     if (!track_info.success || track_info.title.isEmpty()) {
-        Render::non_playing_display();
+        Render::non_playing();
         return;
     }
 
@@ -195,24 +213,26 @@ void album_cover(const String &url) {
         return;
     }
 
-    tft.drawJpg(jpg_buff.data(), jpg_buff.size(), img.x, img.y);
+    TJpgDec.drawJpg(img.x, img.y, jpg_buff.data(), jpg_buff.size());
     cache.album_cover_url = url;
 }
 
-void non_playing_display() {
+void non_playing() {
     if (Detail::render_cache.non_playing_shown) {
         return;
     }
 
     constexpr Rect label_position{160, 85, 0, 0};  // Screen center (320x170)
 
-    tft.fillScreen(TFT_BLACK);
+    tft.fillScreen(TFT_RED);
 
-    tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    tft.setTextColor(TFT_WHITE, TFT_RED);
     tft.setTextSize(2);
     tft.setTextDatum(MC_DATUM);
     tft.drawString("Nothing's playing", label_position.x, label_position.y);
-    tft.setTextDatum(TL_DATUM);  // Restore default for the other functions
+
+    // Restore default for the other functions
+    tft.setTextDatum(TL_DATUM);
 
     Detail::invalidate_caches();
     Detail::render_cache.non_playing_shown = true;

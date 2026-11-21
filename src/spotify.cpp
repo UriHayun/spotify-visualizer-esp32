@@ -9,6 +9,7 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <format>
@@ -265,6 +266,14 @@ String fetch_access_token(bool force_refresh) {
             .c_str());
 
     int http_code = http.POST(payload);
+
+    if (http_code <= 0) {
+        std::array<char, 128> tls_err{};
+        client.lastError(tls_err.data(), tls_err.size());
+        Serial.print("TLS error: ");
+        Serial.println(tls_err.data());
+    }
+
     const String body = (http_code == HTTP_CODE_OK) ? http.getString() : "";
     http.end();
 
