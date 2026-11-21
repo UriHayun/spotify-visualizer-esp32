@@ -78,6 +78,20 @@ void invalidate_caches() {
     render_cache.duration_secs = std::numeric_limits<unsigned long>::max();
 }
 
+// Shortens text (track metadata) to fit inside the screen - appends "..." until it fits in
+// max_width pixels. Measures with the current text size, so call it after setTextSize()
+String fit_text(String text, int max_width) {
+    if (tft.textWidth(text) <= max_width) {
+        return text;
+    }
+
+    while (text.length() > 0 && tft.textWidth(text + "...") > max_width) {
+        text.remove(text.length() - 1);
+    }
+
+    return text + "...";
+}
+
 }  // namespace Display::Render::Detail
 
 namespace Display::Render {
@@ -258,20 +272,26 @@ void metadata(const String &title, const String &artists) {
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.setTextSize(2);
     tft.setCursor(area.x, area.y + 6);
-    tft.print(title);
+    tft.print(Detail::fit_text(title, area.w));
 
     // Draw track artist/s name/s
     tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
     tft.setTextSize(1);
     tft.setCursor(area.x, area.y + 34);
-    tft.print(artists);
+    tft.print(Detail::fit_text(artists, area.w));
 
     cache.title = title;
     cache.artists = artists;
 }
 
 void all(const TrackInfo &track_info) {
-    Detail::render_cache.non_playing_shown = false;
+    auto &cache = Detail::render_cache;
+
+    // Wipe out non-playing display before rendering the track
+    if (cache.non_playing_shown) {
+        tft.fillScreen(TFT_BLACK);
+        cache.non_playing_shown = false;
+    }
 
     Render::metadata(track_info.title, track_info.artists);
     Render::album_cover(track_info.album_cover_url);

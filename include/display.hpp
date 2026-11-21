@@ -30,6 +30,8 @@ std::string format_mins_secs(unsigned long total_secs);
 
 void invalidate_caches();
 
+String fit_text(String text, int max_width);
+
 }  // namespace Display::Render::Detail
 
 namespace Display::Render {

@@ -29,7 +29,9 @@ TrackInfo fetch_curr_track_info() {
 
     Serial.println("Fetching playing track from Spotify...");
 
-    if (!http.begin(client, "https://api.spotify.com/v1/me/player/currently-playing")) {
+    if (!http.begin(client,
+            "https://api.spotify.com/v1/me/player/"
+            "currently-playing?additional_types=track,episode")) {
         Serial.println("Failed to begin HTTPS session");
         return track_info;
     }
@@ -67,7 +69,9 @@ TrackInfo fetch_curr_track_info() {
             return track_info;
         }
 
-        if (!http.begin(client, "https://api.spotify.com/v1/me/player/currently-playing")) {
+        if (!http.begin(client,
+                "https://api.spotify.com/v1/me/player/"
+                "currently-playing?additional_types=track,episode")) {
             Serial.println("Failed to re-open HTTPS session after access token refresh");
             return track_info;
         }
@@ -100,13 +104,19 @@ TrackInfo fetch_curr_track_info() {
 
         track_info.is_playing = doc["is_playing"] | false;
 
-        if (!doc["item"].isNull()) {
-            // Parse track information from the JSON response
-            track_info.title = doc["item"]["name"].as<String>();
-            track_info.artists = doc["item"]["artists"][0]["name"].as<String>();
+        const unsigned long progress_ms = doc["progress_ms"] | 0UL;
 
+        if (!doc["item"].isNull()) {
+            const JsonObjectConst item = doc["item"];
+            const bool is_episode = item["type"] == "episode";
+
+            // Parse track information from the JSON response
+            track_info.title = item["name"].as<String>();
+            track_info.artists = is_episode ? item["show"]["name"].as<String>()
+                                            : item["artists"][0]["name"].as<String>();
             // Album cover URL (images array is ordered by size - biggest to smallest)
-            JsonArrayConst imgs = doc["item"]["album"]["images"];
+            JsonArrayConst imgs = is_episode ? item["images"].as<JsonArrayConst>()
+                                             : item["album"]["images"].as<JsonArrayConst>();
             if (imgs.isNull() || imgs.size() == 0) {
                 track_info.album_cover_url = "";
                 http.end();
@@ -114,7 +124,7 @@ TrackInfo fetch_curr_track_info() {
             }
             track_info.album_cover_url = imgs[imgs.size() - 1]["url"].as<String>();
 
-            track_info.progress_ms = doc["item"]["progress_ms"].as<unsigned long>();
+            track_info.progress_ms = progress_ms;
             track_info.duration_ms = doc["item"]["duration_ms"].as<unsigned long>();
             track_info.success = true;
         } else {
@@ -229,7 +239,11 @@ bool tls_certify_requests(WiFiClientSecure &client) {
         return false;
     }
 
-    client.setCACert(Config::Spotify::ROOT_CA);
+    // CHANGED (TEMPORARY TEST): certificate verification is OFF for this line.
+    // Was: client.setCACert(Config::Spotify::ROOT_CA);
+    // Purpose: if the token refresh works with this, the pinned ROOT_CA was the problem.
+    // This is insecure. Do not leave it in; restore the setCACert line afterwards.
+    client.setInsecure();
     return true;
 }
 

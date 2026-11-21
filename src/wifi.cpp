@@ -5,6 +5,7 @@
 
 #include <WiFi.h>
 #include <WiFiManager.h>
+#include <esp_sleep.h>
 
 #include <cstddef>
 
@@ -13,6 +14,9 @@ namespace Wifi {
 void init() {
     // Set Wi-Fi mode to STA (Station) - wireless microcontroller acts as a client
     WiFi.mode(WIFI_STA);
+
+    WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+    WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
 
     // Print found, nearby networks to Serial Monitor
     const int networks = WiFi.scanNetworks();
@@ -44,12 +48,9 @@ void init() {
     bool success = wm.autoConnect("ESP32_Config_AP", Secrets::Wifi::AUTO_CONN_PASSWORD);
 
     if (!success) {
-        Serial.println("Failed to connect and configuration portal timed out. Restarting...");
-
-        delay(3000);
-
-        // Restart the ESP32 to retry the connection cycle
-        ESP.restart();
+        Serial.println("Wi-Fi not configured before the portal timed out. Shutting down...");
+        Serial.flush();
+        esp_deep_sleep_start();
     }
 
     // Enforce native background auto-reconnects once connected
@@ -57,6 +58,7 @@ void init() {
 
     const String ip_address = WiFi.localIP().toString();
     Serial.printf("Wi-Fi connected successfully!\nIP Address: %s\n", ip_address.c_str());
+    Serial.printf("Signal: %d dBm\n", WiFi.RSSI());
 }
 
 }  // namespace Wifi
