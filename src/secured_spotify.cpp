@@ -228,6 +228,7 @@ bool sync_device_ntp() {
 bool tls_certify_requests(WiFiClientSecure &client) {
     if (Config::Spotify::ROOT_CA[0] == '\0') {
         Serial.println("Spotify root CA certificate isn't configured");
+        Serial.println(Config::Spotify::ROOT_CA);
         return false;
     }
 

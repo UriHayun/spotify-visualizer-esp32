@@ -13,7 +13,7 @@ constexpr std::size_t CONFIG_PORTAL_TIMEOUT_SEC = 180;  // 3 minutes
 
 namespace Config::Spotify {
 
-constexpr unsigned long SPOTIFY_POLL_INTERVAL_MS = 15'000;
+constexpr unsigned long SPOTIFY_POLL_INTERVAL_MS = 4000;
 
 constexpr std::string_view NTP_SERVER = "pool.ntp.org";
 constexpr std::chrono::milliseconds NTP_SYNC_TIMEOUT_MS = std::chrono::milliseconds(20'000);
@@ -26,7 +26,7 @@ constexpr unsigned long SHORT_LIVED_TOKEN_DIVISOR = 2UL;
 // Include the "-----BEGIN CERTIFICATE-----" and "-----END CERTIFICATE-----" lines
 // Keep certificate verification enabled, do not replace this with setInsecure()
 //
-// C++ raw string literal (R"EOF(...)EOF") preserve leading spaces - flush left
+// C++ raw string literal (R"EOF(...)EOF") preserves leading spaces - flush left
 constexpr char ROOT_CA[] = R"EOF(
 -----BEGIN CERTIFICATE-----
 MIIDjjCCAnagAwIBAgIQAzrx5qcRqaC7KGSxHQn65TANBgkqhkiG9w0BAQsFADBh

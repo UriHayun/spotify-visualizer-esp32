@@ -107,7 +107,7 @@ void progress_bar(unsigned long progress_ms, unsigned long duration_ms) {
     constexpr Rect progress_bar_padded = outline.padded(10);  // Padding in %
 
     // Draw rectangled-shaped outline
-    tft.drawRect(outline.x, outline.y, outline.w, outline.h, TFT_WHITE);
+    tft.drawRect(outline.x, outline.y, outline.w, outline.h, TFT_NAVY);
 
     const int filled_w = std::clamp<int>(
         static_cast<int>(static_cast<float>(progress_ms) / duration_ms * progress_bar_padded.w),
@@ -115,8 +115,11 @@ void progress_bar(unsigned long progress_ms, unsigned long duration_ms) {
         progress_bar_padded.w);
 
     // Fill up progress bar progress out of duration
-    tft.fillRect(
-        progress_bar_padded.x, progress_bar_padded.y, filled_w, progress_bar_padded.h, TFT_GREEN);
+    tft.fillRect(progress_bar_padded.x,
+        progress_bar_padded.y,
+        filled_w,
+        progress_bar_padded.h,
+        TFT_DARKCYAN);
 
     // Clear out remaining progress bar space (if any)
     // to prevent flashing of unstyled content (FOUC)
@@ -238,9 +241,9 @@ void non_playing() {
 
     constexpr Rect label_position{160, 85, 0, 0};  // Screen center (320x170)
 
-    tft.fillScreen(TFT_RED);
+    tft.fillScreen(TFT_NAVY);
 
-    tft.setTextColor(TFT_WHITE, TFT_RED);
+    tft.setTextColor(TFT_WHITE, TFT_NAVY);
     tft.setTextSize(2);
     tft.setTextDatum(MC_DATUM);
     tft.drawString("Nothing's playing", label_position.x, label_position.y);
