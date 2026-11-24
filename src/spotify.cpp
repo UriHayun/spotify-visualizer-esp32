@@ -240,11 +240,9 @@ bool tls_certify_requests(WiFiClientSecure &client) {
         return false;
     }
 
-    // CHANGED (TEMPORARY TEST): certificate verification is OFF for this line.
-    // Was: client.setCACert(Config::Spotify::ROOT_CA);
-    // Purpose: if the token refresh works with this, the pinned ROOT_CA was the problem.
-    // This is insecure. Do not leave it in; restore the setCACert line afterwards.
+    // client.setCACert(Config::Spotify::ROOT_CA);
     client.setInsecure();
+
     return true;
 }
 
