@@ -19,8 +19,10 @@ struct TrackInfo {
 };
 
 TrackInfo fetch_curr_track_info();
-
 void update_curr_track_info(TrackInfo &current_track);
+
+bool skip_next();
+bool skip_previous();
 
 }  // namespace Spotify
 
