@@ -14,7 +14,106 @@
 #include <chrono>
 #include <format>
 #include <mutex>
+#include <string>
+#include <string_view>
 #include <thread>
+
+namespace {
+
+std::mutex token_mutex;
+String token = "";
+unsigned long token_expiry_ms = 0;
+std::atomic<bool> is_ntp_synced = false;
+
+template <typename RequestFn> int with_token_retry(RequestFn request) {
+    String access_token = Spotify::Detail::fetch_access_token();
+    if (access_token.isEmpty()) {
+        Serial.println("No access token available");
+        return -1;
+    }
+
+    int http_res_code = request(access_token);
+    if (http_res_code != HTTP_CODE_UNAUTHORIZED) {
+        return http_res_code;
+    }
+
+    Serial.println("HTTP 401: refreshing token and retrying once");
+    access_token = Spotify::Detail::fetch_access_token(true);
+    if (access_token.isEmpty()) {
+        Serial.println("Token force-refresh returned empty token");
+        return -1;
+    }
+
+    return request(access_token);
+}
+
+enum class PlayerCommand { Back, Forward };
+
+constexpr std::string_view PLAYER_BASE_URL = "https://api.spotify.com/v1/me/player/";
+
+constexpr std::string_view endpoint_path(PlayerCommand cmd) {
+    switch (cmd) {
+    case PlayerCommand::Back:
+        return "previus";
+    case PlayerCommand::Forward:
+        return "next";
+    }
+
+    return {};
+}
+
+bool send_player_cmd(PlayerCommand cmd) {
+    WiFiClientSecure client;
+
+    // if (!Detail::tls_certify_requests(client)) {
+    //     return false;
+    // }
+
+    client.setInsecure();  // TEMPORARY
+
+    const std::string request_url = std::string(PLAYER_BASE_URL) + std::string(endpoint_path(cmd));
+
+    const int http_res_code = with_token_retry([&](const String &access_token) {
+        HTTPClient http;
+
+        if (!http.begin(client, request_url.c_str())) {
+            return -1;
+        }
+
+        http.addHeader("Authorization", "Bearer " + access_token);
+
+        const int code = http.POST("");
+        http.end();
+        return code;
+    });
+
+    switch (http_res_code) {
+    case HTTP_CODE_OK:
+    case HTTP_CODE_NO_CONTENT:
+        return true;
+    case HTTP_CODE_FORBIDDEN:
+        Serial.println("HTTP 403: access forbidden. Your Spotify access token has expired, is "
+                       "invalid, or your account isn't premium");
+        return false;
+    case HTTP_CODE_NOT_FOUND:
+        Serial.println("HTTP 404: no active device");
+        return false;
+    case HTTP_CODE_TOO_MANY_REQUESTS:
+        Serial.println("HTTP 429: too many requests. Application has exceeded rate limits");
+        return false;
+    default:
+        Serial.printf("Unexpected HTTP response code: %d\n", http_res_code);
+        return false;
+    }
+}
+
+void invalidate_token() {
+    const std::lock_guard<std::mutex> lock(token_mutex);
+    token = "";
+    token_expiry_ms = 0;
+}
+
+}  // namespace
 
 namespace Spotify {
 
@@ -172,22 +271,10 @@ void update_curr_track_info(TrackInfo &curr_track_info) {
     }
 }
 
+bool skip_next() { return send_player_cmd(PlayerCommand::Forward); }
+bool skip_previous() { return send_player_cmd(PlayerCommand::Back); }
+
 }  // namespace Spotify
-
-namespace {
-
-std::mutex token_mutex;
-String token = "";
-unsigned long token_expiry_ms = 0;
-std::atomic<bool> is_ntp_synced = false;
-
-void invalidate_token() {
-    const std::lock_guard<std::mutex> lock(token_mutex);
-    token = "";
-    token_expiry_ms = 0;
-}
-
-}  // namespace
 
 namespace Spotify::Detail {
 
