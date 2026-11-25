@@ -51,6 +51,10 @@ pLiaWN0bfVKfjllDiIGknibVb63dDcY3fe0Dkhvld1927jyNxF1WW6LZZm6zNTfl
 MrY=
 -----END CERTIFICATE-----)EOF";
 
+constexpr std::uint32_t REFETCH_DELAY_MS = 400;
+
+constexpr std::size_t MAX_REQUEST_ATTEMPTS = 2;
+
 }  // namespace Config::Spotify
 
 namespace Config::Display {
