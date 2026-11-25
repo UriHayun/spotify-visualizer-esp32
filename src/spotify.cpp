@@ -81,6 +81,7 @@ bool send_player_cmd(PlayerCommand cmd) {
         }
 
         http.addHeader("Authorization", "Bearer " + access_token);
+        http.addHeader("Content-Length", "0");
 
         const int code = http.POST("");
         http.end();
