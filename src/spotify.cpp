@@ -54,7 +54,7 @@ constexpr std::string_view PLAYER_BASE_URL = "https://api.spotify.com/v1/me/play
 constexpr std::string_view endpoint_path(PlayerCommand cmd) {
     switch (cmd) {
     case PlayerCommand::Back:
-        return "previus";
+        return "previous";
     case PlayerCommand::Forward:
         return "next";
     }
