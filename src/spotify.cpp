@@ -51,7 +51,7 @@ enum class PlayerCommand { Back, Forward };
 
 constexpr std::string_view PLAYER_BASE_URL = "https://api.spotify.com/v1/me/player/";
 
-constexpr std::string_view endpoint_path(PlayerCommand cmd) {
+constexpr std::string_view decode_action(PlayerCommand cmd) {
     switch (cmd) {
     case PlayerCommand::Back:
         return "previous";
@@ -63,18 +63,17 @@ constexpr std::string_view endpoint_path(PlayerCommand cmd) {
 }
 
 bool send_player_cmd(PlayerCommand cmd) {
-    WiFiClientSecure client;
-
-    // if (!Detail::tls_certify_requests(client)) {
-    //     return false;
-    // }
-
-    client.setInsecure();  // TEMPORARY
-
-    const std::string request_url = std::string(PLAYER_BASE_URL) + std::string(endpoint_path(cmd));
+    const std::string request_url = std::string(PLAYER_BASE_URL) + std::string(decode_action(cmd));
 
     const int http_res_code = with_token_retry([&](const String &access_token) {
         HTTPClient http;
+        WiFiClientSecure client;
+
+        // if (!Detail::tls_certify_requests(client)) {
+        //     return -1;
+        // }
+
+        client.setInsecure();  // TEMPORARY
 
         if (!http.begin(client, request_url.c_str())) {
             return -1;
@@ -84,6 +83,9 @@ bool send_player_cmd(PlayerCommand cmd) {
         http.addHeader("Content-Length", "0");
 
         const int code = http.POST("");
+        if (code >= 400) {
+            Serial.printf("Spotify error body: %s\n", http.getString().c_str());
+        }
         http.end();
         return code;
     });
