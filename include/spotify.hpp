@@ -21,8 +21,11 @@ struct TrackInfo {
 TrackInfo fetch_curr_track_info();
 void update_curr_track_info(TrackInfo &current_track);
 
-bool skip_next();
-bool skip_previous();
+[[nodiscard]] bool skip_next();
+[[nodiscard]] bool skip_prev();
+
+[[nodiscard]] bool play_playback();
+[[nodiscard]] bool pause_playback();
 
 }  // namespace Spotify
 

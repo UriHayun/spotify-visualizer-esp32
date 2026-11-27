@@ -54,15 +54,26 @@ void loop() {
     }
 
     switch (Buttons::poll_action()) {
-    case Buttons::Event::PrevActuated:
-        if (Spotify::skip_previous())
+    case Buttons::Action::PrevTapped:
+        if (Spotify::skip_prev())
             refetch_at_ms = millis() + Config::Spotify::REFETCH_DELAY_MS;
+
         break;
-    case Buttons::Event::NextActuated:
+
+    case Buttons::Action::NextTapped:
         if (Spotify::skip_next())
             refetch_at_ms = millis() + Config::Spotify::REFETCH_DELAY_MS;
+
         break;
-    case Buttons::Event::None:
+
+    case Buttons::Action::PlayPauseRequested:
+        if (curr_track_info.is_playing ? Spotify::pause_playback() : Spotify::play_playback()) {
+            refetch_at_ms = millis() + Config::Spotify::REFETCH_DELAY_MS;
+        }
+
+        break;
+
+    case Buttons::Action::None:
         break;
     }
 
