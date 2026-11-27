@@ -2,9 +2,9 @@
 
 namespace Buttons {
 
-enum class Event { None, PrevActuated, NextActuated };
+enum class Action { None, PrevTapped, NextTapped, PlayPauseRequested };
 
 void init();
-Event poll_action();
+[[nodiscard]] Action poll_action();
 
 }  // namespace Buttons

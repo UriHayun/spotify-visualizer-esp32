@@ -47,7 +47,7 @@ template <typename RequestFn> int with_token_retry(RequestFn request) {
     return request(access_token);
 }
 
-enum class PlayerCommand { Back, Forward };
+enum class PlayerCommand { Back, Forward, Play, Pause };
 
 constexpr std::string_view PLAYER_BASE_URL = "https://api.spotify.com/v1/me/player/";
 
@@ -57,32 +57,51 @@ constexpr std::string_view decode_action(PlayerCommand cmd) {
         return "previous";
     case PlayerCommand::Forward:
         return "next";
+    case PlayerCommand::Play:
+        return "play";
+    case PlayerCommand::Pause:
+        return "pause";
     }
 
     return {};
 }
 
-bool send_player_cmd(PlayerCommand cmd) {
+constexpr std::string_view http_method_for(PlayerCommand cmd) {
+    switch (cmd) {
+    case PlayerCommand::Forward:
+    case PlayerCommand::Back:
+        return "POST";
+
+    case PlayerCommand::Play:
+    case PlayerCommand::Pause:
+        return "PUT";
+    }
+
+    return "POST";
+}
+
+[[nodiscard]] bool send_player_cmd(PlayerCommand cmd) {
     const std::string request_url = std::string(PLAYER_BASE_URL) + std::string(decode_action(cmd));
 
     const int http_res_code = with_token_retry([&](const String &access_token) {
-        HTTPClient http;
         WiFiClientSecure client;
-
         // if (!Detail::tls_certify_requests(client)) {
         //     return -1;
         // }
-
         client.setInsecure();  // TEMPORARY
 
+        HTTPClient http;
         if (!http.begin(client, request_url.c_str())) {
             return -1;
         }
 
         http.addHeader("Authorization", "Bearer " + access_token);
+        http.addHeader("Content-Type", "application/json");
         http.addHeader("Content-Length", "0");
 
-        const int code = http.POST("");
+        const std::string_view method = http_method_for(cmd);
+
+        const int code = (method == "PUT") ? http.PUT("") : http.POST("");
         if (code >= 400) {
             Serial.printf("Spotify error body: %s\n", http.getString().c_str());
         }
@@ -119,7 +138,6 @@ void invalidate_token() {
 }  // namespace
 
 namespace Spotify {
-
 TrackInfo fetch_curr_track_info() {
     TrackInfo track_info;
     WiFiClientSecure client;
@@ -148,7 +166,6 @@ TrackInfo fetch_curr_track_info() {
     String auth_header = "Bearer " + access_token;
 
     http.addHeader("Authorization", auth_header);
-    http.addHeader("Content-Type", "application/json");
 
     int http_res_code = http.GET();
 
@@ -242,7 +259,8 @@ TrackInfo fetch_curr_track_info() {
         break;
 
     case (HTTP_CODE_UNAUTHORIZED):
-        // Reached only if the initial request and the forced token refresh both returned HTTP 401
+        // Reached only if the initial request and the forced token refresh both returned
+        // HTTP 401
         Serial.println(
             "HTTP 401: still unauthorized after token refresh - giving up for this poll");
         break;
@@ -275,14 +293,17 @@ void update_curr_track_info(TrackInfo &curr_track_info) {
 }
 
 bool skip_next() { return send_player_cmd(PlayerCommand::Forward); }
-bool skip_previous() { return send_player_cmd(PlayerCommand::Back); }
+bool skip_prev() { return send_player_cmd(PlayerCommand::Back); }
+
+bool play_playback() { return send_player_cmd(PlayerCommand::Play); }
+bool pause_playback() { return send_player_cmd(PlayerCommand::Pause); }
 
 }  // namespace Spotify
 
 namespace Spotify::Detail {
-
 // Solves Unix Epoch default time problem by syncing the time with NTP,
-// in order to validate TLS certificates for HTTPS requests (prevents 1970 clock default error)
+// in order to validate TLS certificates for HTTPS requests (prevents 1970 clock default
+// error)
 bool sync_device_ntp() {
     using namespace std::chrono;
     using namespace std::chrono_literals;
