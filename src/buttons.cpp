@@ -56,9 +56,10 @@ Button next{PIN_NEXT, false, false, 0};
     return Gesture::None;
 }
 
-void sync_to_pin(Button &btn) {
+void sync_btn_state(Button &btn) {
     btn.is_actuated = digitalRead(btn.pin) == LOW;
     btn.last_poll_actuation = btn.is_actuated;
+    btn.long_press_actuated = btn.is_actuated;
 }
 
 }  // namespace
@@ -69,8 +70,8 @@ void init() {
     pinMode(PIN_PREV, INPUT_PULLUP);
     pinMode(PIN_NEXT, INPUT_PULLUP);
 
-    sync_to_pin(prev);
-    sync_to_pin(next);
+    sync_btn_state(prev);
+    sync_btn_state(next);
 }
 
 Action poll_action() {

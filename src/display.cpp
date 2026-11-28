@@ -1,5 +1,4 @@
 #include "display.hpp"
-#include "config.hpp"
 #include "spotify.hpp"
 
 #include <HTTPClient.h>
@@ -10,6 +9,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <limits>
 #include <string>
 #include <vector>
@@ -20,12 +20,14 @@ namespace {
 
 TFT_eSPI tft;
 
+constexpr std::chrono::seconds ALBUM_COVER_DOWNLOAD_TIMEOUT_SECS{5};
+
 // TJpg_Decoder calls this for each decoded block
-bool jpg_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t *bitmap) {
+bool draw_jpg_block(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t *bmp) {
     if (y >= tft.height()) {
         return false;
     }
-    tft.pushImage(x, y, w, h, bitmap);
+    tft.pushImage(x, y, w, h, bmp);
     return true;
 }
 
@@ -37,7 +39,7 @@ void init() {
     tft.begin();
     tft.setRotation(1);  // Landscape (320x170)
     TJpgDec.setSwapBytes(true);
-    TJpgDec.setCallback(jpg_output);
+    TJpgDec.setCallback(draw_jpg_block);
     tft.fillScreen(TFT_BLACK);
 
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -45,6 +47,7 @@ void init() {
     tft.setCursor(10, 10);
     tft.println("Initializing display...");
 }
+
 void render(const TrackInfo &track_info) {
     if (!track_info.success || track_info.title.isEmpty()) {
         Render::non_playing();
@@ -80,7 +83,7 @@ void invalidate_caches() {
 
 // Shortens text (track metadata) to fit inside the screen - appends "..." until it fits in
 // max_width pixels. Measures with the current text size, so call it after setTextSize()
-String fit_text(String text, int max_width) {
+String fit_text(String text, std::int16_t max_width) {
     if (tft.textWidth(text) <= max_width) {
         return text;
     }
@@ -178,7 +181,7 @@ void album_cover(const String &url) {
     }
 
     WiFiClientSecure client;
-    Spotify::Detail::tls_certify_requests(client);
+    Spotify::Detail::configure_tls(client);
 
     HTTPClient http;
     if (!http.begin(client, url)) {
@@ -208,8 +211,7 @@ void album_cover(const String &url) {
     const auto start_time_ms = std::chrono::steady_clock::now();
 
     while (http.connected() && bytes_read < jpg_buff.size() &&
-           std::chrono::steady_clock::now() - start_time_ms <
-               Config::Display::ALBUM_COVER_DOWNLOAD_TIMEOUT_MS) {
+           std::chrono::steady_clock::now() - start_time_ms < ALBUM_COVER_DOWNLOAD_TIMEOUT_SECS) {
         const int avail = stream->available();
         if (avail <= 0) {
             delay(1);

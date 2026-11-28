@@ -1,13 +1,17 @@
-
 #include "wifi.hpp"
-#include "config.hpp"
-#include "secrets.hpp"
+#include "secrets.h"
 
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <esp_sleep.h>
 
 #include <cstddef>
+
+namespace {
+
+constexpr unsigned long CONFIG_PORTAL_TIMEOUT_SEC = 180;  // 3 minutes
+
+}  // namespace
 
 namespace Wifi {
 
@@ -33,7 +37,7 @@ void init() {
     WiFiManager wm;
 
     // Configure to auto-close the portal if nobody configures it within N seconds
-    wm.setConfigPortalTimeout(Config::Wifi::CONFIG_PORTAL_TIMEOUT_SEC);
+    wm.setConfigPortalTimeout(CONFIG_PORTAL_TIMEOUT_SEC);
 
     Serial.println("Attempting connection via WiFiManager...");
 

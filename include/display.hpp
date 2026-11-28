@@ -3,6 +3,7 @@
 #include <spotify.hpp>
 
 #include <algorithm>
+#include <cstdint>
 #include <limits>
 #include <string>
 
@@ -30,7 +31,7 @@ std::string format_mins_secs(unsigned long total_secs);
 
 void invalidate_caches();
 
-String fit_text(String text, int max_width);
+String fit_text(String text, std::int16_t max_width);
 
 }  // namespace Display::Render::Detail
 

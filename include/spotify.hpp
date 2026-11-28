@@ -32,7 +32,6 @@ void update_curr_track_info(TrackInfo &current_track);
 namespace Spotify::Detail {
 
 bool sync_device_ntp();
-bool tls_certify_requests(WiFiClientSecure &client);
-String fetch_access_token(bool force_refresh = false);
+bool configure_tls(WiFiClientSecure &client);
 
 }  // namespace Spotify::Detail
